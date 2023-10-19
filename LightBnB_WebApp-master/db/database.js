@@ -1,4 +1,5 @@
 require('dotenv').config();
+const { query } = require('express');
 const properties = require("./json/properties.json");
 const users = require("./json/users.json");
 
@@ -54,7 +55,6 @@ const getUserWithId = function(id) {
  * @return {Promise<{}>} A promise to the user.
  */
 const addUser = function(user) {
-  console.log(user.name, user.email, user.password);
   return pool
     .query(`INSERT INTO users (name, email, password)
     VALUES($1, $2, $3) RETURNING *;`,
@@ -104,9 +104,63 @@ const getAllReservations = function(guest_id, limit = 10) {
  * @param {*} limit The number of results to return.
  * @return {Promise<[{}]>}  A promise to the properties.
  */
-const getAllProperties = function(_options, limit = 10) {
+const getAllProperties = function(options, limit = 10) {
+
+  // 1
+  const queryParams = [];
+
+  // 2
+  let queryString = `
+  SELECT properties.*, avg(property_reviews.rating) as average_rating
+  FROM properties
+  JOIN property_reviews ON properties.id = property_id
+  `;
+
+  //'3'
+  let includeAnd = false;
+
+  // min max cost
+  // we could separate min and max but requirements state:
+  // "if a minimum_price_per_night AND A maximum_price_per_night, only return properties within that price range."
+  if (options.minimum_price_per_night && options.maximum_price_per_night) {
+    queryParams.push(options.minimum_price_per_night * 100);
+    queryParams.push(options.maximum_price_per_night * 100);
+    queryString += `WHERE cost_per_night > $${queryParams.length - 1} AND cost_per_night < $${queryParams.length}`;
+    includeAnd = true;
+  }
+
+  //city
+  if (options.city) {
+    queryParams.push(`%${options.city}%`);
+    queryString += includeAnd ? ' AND ' : ' WHERE ';
+    queryString += `city LIKE $${queryParams.length} `;
+    includeAnd = true;
+  }
+
+  //owner
+  if (options.owner_id) {
+    queryParams.push(Number(options.owner_id));
+    queryString += includeAnd ? ' AND ' : ' WHERE ';
+    queryString += `owner_id = $${queryParams.length} `;
+    includeAnd = true;
+  }
+
+  queryString += `GROUP BY properties.id `;
+
+  //rating
+  if (options.minimum_rating) {
+    queryParams.push(Number(options.minimum_rating));
+    queryString += `HAVING avg(property_reviews.rating) >= $${queryParams.length} `;
+  }
+
+  queryString += `ORDER BY cost_per_night `;
+
+  queryParams.push(limit);
+  queryString += ` LIMIT $${queryParams.length};`;
+
+  // finally
   return pool
-    .query(`SELECT * FROM properties LIMIT $1;`, [limit])
+    .query(queryString, queryParams)
     .then((result) => {
       return result.rows;
     })
