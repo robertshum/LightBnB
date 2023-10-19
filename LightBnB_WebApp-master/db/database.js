@@ -1,17 +1,9 @@
 require('dotenv').config();
-const { query } = require('express');
-const properties = require("./json/properties.json");
-const users = require("./json/users.json");
+// const { query } = require('express');
+// const properties = require("./json/properties.json");
+// const users = require("./json/users.json");
 
-const { Pool } = require('pg');
-
-//config
-const pool = new Pool({
-  user: process.env.USER,
-  password: process.env.PASSWORD,
-  host: process.env.HOST,
-  database: process.env.DATABASE
-});
+const pool = require('./pgwrapper');
 
 /// Users
 
